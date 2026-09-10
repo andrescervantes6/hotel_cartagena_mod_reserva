@@ -1,103 +1,169 @@
 import '../models/habitacion.dart';
-import '../models/reserva.dart';
 import '../models/huesped.dart';
-import '../enums/estado_habitacion.dart';
+import '../models/recepcionista.dart';
+import '../models/reserva.dart';
+import '../models/check_in.dart';
+import '../models/check_out.dart';
 import '../enums/tipo_habitacion.dart';
+import '../enums/estado_habitacion.dart';
 
+// Clase principal del sistema: guarda toda la información del hotel
+// y contiene las reglas de negocio (reservas, check-in, check-out, etc).
+// La interfaz de consola (SistemaHotel) solo llama a estos métodos,
+// no valida nada por su cuenta.
 class Hotel {
   List<Habitacion> habitaciones = [];
+  List<Recepcionista> recepcionistas = [];
   List<Reserva> reservas = [];
+  List<CheckIn> checkIns = [];
+  List<CheckOut> checkOuts = [];
 
   Hotel() {
     crearHabitacionesIniciales();
   }
 
+  // Carga inicial de habitaciones del hotel. En una versión real esto
+  // vendría de una base de datos o de un archivo de configuración.
   void crearHabitacionesIniciales() {
-    habitaciones.add(Habitacion(numero: 1, tipo: TipoHabitacion.sencilla, capacidad: 1));
-    habitaciones.add(Habitacion(numero: 2, tipo: TipoHabitacion.doble, capacidad: 2));
-    habitaciones.add(Habitacion(numero: 3, tipo: TipoHabitacion.suite, capacidad: 4));
+    habitaciones.add(Habitacion(numero: 101, tipo: TipoHabitacion.sencilla, capacidad: 1));
+    habitaciones.add(Habitacion(numero: 102, tipo: TipoHabitacion.sencilla, capacidad: 1));
+    habitaciones.add(Habitacion(numero: 201, tipo: TipoHabitacion.doble, capacidad: 2));
+    habitaciones.add(Habitacion(numero: 202, tipo: TipoHabitacion.doble, capacidad: 2));
+    habitaciones.add(Habitacion(numero: 301, tipo: TipoHabitacion.suite, capacidad: 4));
   }
 
-  // 🔍 Buscar habitación
-  Habitacion? buscarHabitacion(int numero) {
-    try {
-      return habitaciones.firstWhere((h) => h.numero == numero);
-    } catch (e) {
-      return null;
+  // ---------- RF01 y RF02: Recepcionistas ----------
+
+  // Devuelve true si el registro fue exitoso, false si el usuario ya existe.
+  bool registrarRecepcionista(String usuario, String contrasena) {
+    for (var r in recepcionistas) {
+      if (r.usuario == usuario) {
+        return false;
+      }
     }
+    recepcionistas.add(Recepcionista(usuario: usuario, contrasena: contrasena));
+    return true;
   }
 
-  // 📌 Reservar habitación
-  String reservar(int numero, String nombre, String documento, int dias) {
-    final habitacion = buscarHabitacion(numero);
+  bool iniciarSesion(String usuario, String contrasena) {
+    for (var r in recepcionistas) {
+      if (r.usuario == usuario && r.contrasena == contrasena) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ---------- Buscar y consultar habitaciones (RF03) ----------
+
+  // Busca una habitación por número. Devuelve null si no existe.
+  Habitacion? buscarHabitacion(int numero) {
+    for (var h in habitaciones) {
+      if (h.numero == numero) {
+        return h;
+      }
+    }
+    return null;
+  }
+
+  List<Habitacion> consultarDisponibles() {
+    List<Habitacion> disponibles = [];
+    for (var h in habitaciones) {
+      if (h.estado == EstadoHabitacion.disponible) {
+        disponibles.add(h);
+      }
+    }
+    return disponibles;
+  }
+
+  // ---------- RF04 y RF05: Reservar habitación ----------
+
+  // Devuelve un mensaje indicando el resultado de la operación.
+  // Se usa String en vez de bool para poder explicar el motivo del rechazo.
+  String reservarHabitacion(Huesped huesped, int numeroHabitacion, int dias) {
+    Habitacion? habitacion = buscarHabitacion(numeroHabitacion);
 
     if (habitacion == null) {
-      return "Habitación no existe";
+      return 'La habitación no existe.';
     }
-
-    if (!habitacion.estaDisponible()) {
-      return "Habitación no disponible";
+    if (habitacion.estado != EstadoHabitacion.disponible) {
+      return 'La habitación no está disponible.';
     }
-
     if (dias <= 0) {
-      return "Días inválidos";
+      return 'Los días deben ser mayores que cero.';
     }
 
-    final huesped = Huesped(nombre: nombre, documento: documento);
-    final reserva = Reserva(
-      numeroHabitacion: numero,
+    habitacion.estado = EstadoHabitacion.reservada;
+    Reserva nuevaReserva = Reserva(
       huesped: huesped,
+      numeroHabitacion: numeroHabitacion,
       dias: dias,
     );
+    reservas.add(nuevaReserva);
 
-    reservas.add(reserva);
-    habitacion.estado = EstadoHabitacion.reservada;
-
-    return "Reserva exitosa";
+    return 'Reserva creada con éxito.';
   }
 
-  // 🏨 Check-in
-  String checkIn(int numero, int personas) {
-    final habitacion = buscarHabitacion(numero);
+  // ---------- RF06: Check-in ----------
+
+  String hacerCheckIn(int numeroHabitacion, int personas) {
+    Habitacion? habitacion = buscarHabitacion(numeroHabitacion);
 
     if (habitacion == null) {
-      return "Habitación no existe";
+      return 'La habitación no existe.';
     }
 
+    // Buscamos si existe una reserva activa para esta habitación.
+    bool tieneReservaActiva = false;
+    for (var r in reservas) {
+      if (r.numeroHabitacion == numeroHabitacion && r.activa) {
+        tieneReservaActiva = true;
+      }
+    }
+
+    if (!tieneReservaActiva) {
+      return 'No existe una reserva activa para esta habitación.';
+    }
     if (habitacion.estado != EstadoHabitacion.reservada) {
-      return "No hay reserva válida";
+      return 'La habitación no está reservada.';
     }
-
-    if (personas <= 0 || personas > habitacion.capacidad) {
-      return "Cantidad de personas inválida";
+    if (personas <= 0) {
+      return 'El número de personas debe ser mayor que cero.';
+    }
+    if (personas > habitacion.capacidad) {
+      return 'El número de personas supera la capacidad.';
     }
 
     habitacion.estado = EstadoHabitacion.ocupada;
-    return "Check-in realizado";
+    checkIns.add(CheckIn(numeroHabitacion: numeroHabitacion, personas: personas));
+
+    return 'Check-in realizado con éxito.';
   }
 
-  // 🚪 Check-out
-  String checkOut(int numero) {
-    final habitacion = buscarHabitacion(numero);
+  // ---------- RF07: Check-out ----------
+
+  String hacerCheckOut(int numeroHabitacion) {
+    Habitacion? habitacion = buscarHabitacion(numeroHabitacion);
 
     if (habitacion == null) {
-      return "Habitación no existe";
+      return 'La habitación no existe.';
     }
-
     if (habitacion.estado != EstadoHabitacion.ocupada) {
-      return "La habitación no está ocupada";
+      return 'La habitación no está ocupada.';
     }
 
     habitacion.estado = EstadoHabitacion.disponible;
-    return "Check-out realizado";
-  }
+    checkOuts.add(CheckOut(numeroHabitacion: numeroHabitacion));
 
-  // 📊 Ver disponibles
-  void mostrarDisponibles() {
-    for (var h in habitaciones) {
-      if (h.estado == EstadoHabitacion.disponible) {
-        print("Habitación ${h.numero} - ${h.tipo}");
+    // Decisión de diseño: la reserva no se elimina, se marca como inactiva
+    // para conservarla como historial (ver README, sección de decisiones).
+    for (var r in reservas) {
+      if (r.numeroHabitacion == numeroHabitacion && r.activa) {
+        r.activa = false;
+        break;
       }
     }
+
+    return 'Check-out realizado con éxito.';
   }
 }

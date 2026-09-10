@@ -1,6 +1,8 @@
-import '../enums/estado_habitacion.dart';
 import '../enums/tipo_habitacion.dart';
+import '../enums/estado_habitacion.dart';
 
+// Representa una habitación del hotel.
+// Toda habitación nueva inicia en estado "disponible" (regla de negocio).
 class Habitacion {
   final int numero;
   final TipoHabitacion tipo;
@@ -14,7 +16,8 @@ class Habitacion {
     this.estado = EstadoHabitacion.disponible,
   });
 
-  bool estaDisponible() {
-    return estado == EstadoHabitacion.disponible;
+  @override
+  String toString() {
+    return 'Habitación $numero (${tipo.name}, capacidad: $capacidad) - ${estado.name}';
   }
 }
